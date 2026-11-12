@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart AI Attendance Portal</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-dark: #3730a3;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #06b6d4;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --text: #1f2937;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        body { background: var(--bg); color: var(--text); padding-bottom: 40px; }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 18px 15px;
+            text-align: center;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+        }
+        .header h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; }
+        .header p { font-size: 12px; opacity: 0.85; margin-top: 4px; }
+
+        .container { max-width: 500px; margin: 0 auto; padding: 15px; }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        .stat-card {
+            background: var(--card);
+            padding: 10px 5px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            border-bottom: 3px solid transparent;
+        }
+        .stat-card.total { border-color: var(--primary); }
+        .stat-card.present { border-color: var(--success); }
+        .stat-card.leave { border-color: var(--info); }
+        .stat-card.absent { border-color: var(--danger); }
+        .stat-num { font-size: 20px; font-weight: 800; display: block; }
+        .stat-label { font-size: 11px; color: #6b7280; font-weight: 600; text-transform: uppercase; }
+
+        /* Navigation Tabs */
+        .tabs {
+            display: flex;
+            background: #e5e7eb;
+            padding: 4px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 10px 5px;
+            border: none;
+            background: transparent;
+            border-radius: 9px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #4b5563;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: var(--card);
+            color: var(--primary);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.08);
+        }
+
+        .tab-content { display: none; animation: fadeIn 0.3s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Card Box */
+        .card {
+            background: var(--card);
+            padding: 16px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            margin-bottom: 15px;
+        }
+
+        /* Camera Box & Live Overlay */
+        .camera-wrapper {
+            position: relative;
+            width: 100%;
+            border-radius: 14px;
+            overflow: hidden;
+            background: #111;
+            border: 3px solid var(--primary);
+            transition: border-color 0.3s;
+        }
+        .camera-wrapper.matched { border-color: var(--success); box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
+        video { width: 100%; display: block; transform: scaleX(-1); }
+
+        .scan-overlay {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(0, 0, 0, 0.72);
+            backdrop-filter: blur(4px);
+            color: white;
+            padding: 10px 12px;
+            text-align: left;
+        }
+        .scan-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+        .progress-bg { width: 100%; height: 6px; background: rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 0%; background: var(--warning); transition: width 0.3s, background 0.3s; }
+
+        /* Registration Progress */
+        .reg-guide {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            color: #92400e;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            font-weight: 700;
+            font-size: 15px;
+            text-align: center;
+            display: none;
+        }
+
+        /* Inputs & Buttons */
+        input, select {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1.5px solid #d1d5db;
+            border-radius: 10px;
+            font-size: 14px;
+            margin-bottom: 10px;
+            outline: none;
+            background: #f9fafb;
+        }
+        input:focus, select:focus { border-color: var(--primary); background: #fff; }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--primary); }
+        .btn-info { background: var(--info); }
+        .btn-warning { background: var(--warning); color: #111; }
+        .btn-danger { background: var(--danger); }
+        .btn-success { background: var(--success); }
+
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .btn-grid .btn { font-size: 12px; padding: 10px 6px; }
+
+        /* Toast Notification */
+        #toast {
+            position: fixed;
+            bottom: 20px; left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #1f2937;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease;
+            z-index: 1000;
+            white-space: nowrap;
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); }
+
+        /* Lists & Tables */
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 14px;
+        }
+        .badge {
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .badge-present { background: #d1fae5; color: #065f46; }
+        .badge-leave { background: #cffafe; color: #155e75; }
+        .badge-absent { background: #fee2e2; color: #991b1b; }
+
+        .mini-btn {
+            padding: 5px 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .mini-reset { background: #fef3c7; color: #92400e; }
+        .mini-del { background: #fee2e2; color: #991b1b; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+        th { text-align: left; padding: 8px 6px; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
+        td { padding: 10px 6px; border-bottom: 1px solid #f3f4f6; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>AI Smart Attendance</h1>
+    <p id="systemStatus">Initializing AI Engine...</p>
+</div>
+
+<div class="container">
+    <!-- Live Dashboard Counters -->
+    <div class="stats-grid">
+        <div class="stat-card total">
+            <span class="stat-num" id="totalCount">0</span>
+            <span class="stat-label">Total</span>
+        </div>
+        <div class="stat-card present">
+            <span class="stat-num" id="presentCount" style="color: var(--success);">0</span>
+            <span class="stat-label">Present</span>
+        </div>
+        <div class="stat-card leave">
+            <span class="stat-num" id="leaveCount" style="color: var(--info);">0</span>
+            <span class="stat-label">Leave</span>
+        </div>
+        <div class="stat-card absent">
+            <span class="stat-num" id="absentCount" style="color: var(--danger);">0</span>
+            <span class="stat-label">Absent</span>
+        </div>
+    </div>
+
+    <!-- Interactive Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('attendanceTab', this)">Live Scan</button>
+        <button class="tab-btn" onclick="switchTab('registerTab', this)">Register Face</button>
+        <button class="tab-btn" onclick="switchTab('recordsTab', this)">Records (<span id="logBadge">0</span>)</button>
+    </div>
+
+    <!-- Shared Live Camera Card (Visible in Scan & Register Tabs) -->
+    <div class="card" id="cameraCard">
+        <div id="instructionBox" class="reg-guide">Get Ready...</div>
+        <div class="camera-wrapper" id="cameraWrapper">
+            <video id="video" autoplay muted playsinline></video>
+            <div class="scan-overlay" id="scanOverlay">
+                <div class="scan-header">
+                    <span id="detectedName">Scanning for face...</span>
+                    <span id="matchPercentText">0%</span>
+                </div>
+                <div class="progress-bg">
+                    <div class="progress-fill" id="matchProgressBar"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 1: LIVE ATTENDANCE & MANUAL LEAVE -->
+    <div id="attendanceTab" class="tab-content active">
+        <div class="card">
+            <h3 style="font-size: 15px; margin-bottom: 10px;">Manual Status (Leave / Absent)</h3>
+            <select id="targetStudent">
+                <option value="">-- Select Student --</option>
+            </select>
+            <div class="btn-grid">
+                <button class="btn btn-info" onclick="markDirectStatus('Medical Leave')">Medical</button>
+                <button class="btn btn-warning" onclick="markDirectStatus('On Duty')">On Duty</button>
+                <button class="btn btn-danger" onclick="markDirectStatus('Absent')">Absent</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TAB 2: 15s VIDEO REGISTRATION -->
+    <div id="registerTab" class="tab-content">
+        <div class="card">
+            <h3 style="font-size: 15px; margin-bottom: 6px;">15-Second Multi-Angle Registration</h3>
+            <p style="font-size: 12px; color: #6b7280; margin-bottom: 12px;">Captures front, left, and right face angles for high accuracy.</p>
+            <input type="text" id="studentName" placeholder="Enter Name & Roll No (e.g. Riya - 12)">
+            <button class="btn btn-primary" id="regBtn" onclick="startVideoRegistration()" disabled>Start 15s Video Scan</button>
+        </div>
+    </div>
+
+    <!-- TAB 3: RECORDS & REGISTERED STUDENTS -->
+    <div id="recordsTab" class="tab-content">
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 style="font-size: 15px;">Today's Attendance</h3>
+                <button class="mini-btn" style="background: #e0e7ff; color: var(--primary);" onclick="exportCSV()">Download CSV</button>
+            </div>
+            <table>
+                <thead>
+                    <tr><th>Student</th><th>Status</th><th>Time</th><th>Fix</th></tr>
+                </thead>
+                <tbody id="attendanceTable"></tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h3 style="font-size: 15px; margin-bottom: 8px;">Registered Students (<span id="regCount">0</span>)</h3>
+            <div id="studentList"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Feedback -->
+<div id="toast">Message here</div>
+
+<script>
+    const video = document.getElementById('video');
+    const systemStatus = document.getElementById('systemStatus');
+    const instructionBox = document.getElementById('instructionBox');
+    const cameraWrapper = document.getElementById('cameraWrapper');
+    const detectedNameEl = document.getElementById('detectedName');
+    const matchPercentText = document.getElementById('matchPercentText');
+    const matchProgressBar = document.getElementById('matchProgressBar');
+    const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+
+    // Clean & Load Data
+    let rawStoredStudents = JSON.parse(localStorage.getItem('students_db')) || [];
+    let registeredStudents = rawStoredStudents.map(s => {
+        if (!s.descriptors && s.descriptor) return { name: s.name, descriptors: [s.descriptor] };
+        return s;
+    }).filter(s => s && s.name && s.descriptors && Array.isArray(s.descriptors));
+    localStorage.setItem('students_db', JSON.stringify(registeredStudents));
+
+    let attendanceLogs = JSON.parse(localStorage.getItem('attendance_db')) || [];
+    let isRecognizing = false;
+    let isRegistering = false;
+
+    // Tab Navigation
+    function switchTab(tabId, btn) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        btn.classList.add('active');
+
+        // Hide camera in Records tab to give full view of tables
+        document.getElementById('cameraCard').style.display = (tabId === 'recordsTab') ? 'none' : 'block';
+    }
+
+    // Toast Popup
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.innerText = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // Load AI Models
+    window.addEventListener('DOMContentLoaded', async () => {
+        try {
+            await Promise.all([
+                faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+            ]);
+            startCamera();
+        } catch (e) {
+            systemStatus.innerText = "Error: Check Internet Connection";
+        }
+    });
+
+    function startCamera() {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } })
+            .then(stream => {
+                video.srcObject = stream;
+                systemStatus.innerText = "AI Active • Auto-Marking at ≥ 60% Match";
+                document.getElementById('regBtn').disabled = false;
+                renderUI();
+
+                video.addEventListener('play', () => {
+                    setInterval(() => {
+                        if (!isRegistering) runAutoRecognition();
+                    }, 1500);
+                });
+            })
+            .catch(() => {
+                systemStatus.innerText = "Camera Permission Denied!";
+            });
+    }
+
+    // 15s Multi-Angle Video Registration
+    async function startVideoRegistration() {
+        const name = document.getElementById('studentName').value.trim();
+        if (!name) return showToast("Please enter student name first!");
+
+        isRegistering = true;
+        document.getElementById('regBtn').disabled = true;
+        document.getElementById('scanOverlay').style.display = "none";
+        instructionBox.style.display = "block";
+
+        let descriptors = [];
+        let steps = [
+            { text: "1/4: Look Straight (3s)...", duration: 3000 },
+            { text: "2/4: Turn Head Slowly LEFT (4s)...", duration: 4000 },
+            { text: "3/4: Turn Head Slowly RIGHT (4s)...", duration: 4000 },
+            { text: "4/4: Look Straight Again (4s)...", duration: 4000 }
+        ];
+
+        for (let step of steps) {
+            instructionBox.innerText = step.text;
+            let endTime = Date.now() + step.duration;
+            while (Date.now() < endTime) {
+                const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+                if (detection) descriptors.push(Array.from(detection.descriptor));
+                await new Promise(r => setTimeout(r, 500));
+            }
+        }
+
+        instructionBox.style.display = "none";
+        document.getElementById('scanOverlay').style.display = "block";
+
+        if (descriptors.length < 3) {
+            showToast("Registration failed! Keep face clearly visible.");
+            isRegistering = false;
+            document.getElementById('regBtn').disabled = false;
+            return;
+        }
+
+        registeredStudents = registeredStudents.filter(s => s.name !== name);
+        registeredStudents.push({ name: name, descriptors: descriptors });
+        localStorage.setItem('students_db', JSON.stringify(registeredStudents));
+
+        document.getElementById('studentName').value = "";
+        showToast(`${name} Registered Successfully!`);
+        isRegistering = false;
+        document.getElementById('regBtn').disabled = false;
+        renderUI();
+    }
+
+    // Continuous Auto Recognition (Threshold: 60%)
+    async function runAutoRecognition() {
+        if (registeredStudents.length === 0) {
+            detectedNameEl.innerText = "No students registered yet";
+            matchPercentText.innerText = "0%";
+            matchProgressBar.style.width = "0%";
+            return;
+        }
+
+        const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+            .withFaceLandmarks()
+            .withFaceDescriptor();
+
+        if (!detection) {
+            detectedNameEl.innerText = "Scanning for face...";
+            matchPercentText.innerText = "0%";
+            matchProgressBar.style.width = "0%";
+            cameraWrapper.classList.remove('matched');
+            return;
+        }
+
+        let bestMatch = { name: "Unknown", distance: 1.0 };
+
+        registeredStudents.forEach(student => {
+            student.descriptors.forEach(savedDesc => {
+                const distance = faceapi.euclideanDistance(detection.descriptor, new Float32Array(savedDesc));
+                if (distance < bestMatch.distance) {
+                    bestMatch = { name: student.name, distance: distance };
+                }
+            });
+        });
+
+        const matchPercentage = Math.max(0, Math.round((1 - bestMatch.distance) * 100));
+
+        // Update Live Camera Overlay Bar
+        detectedNameEl.innerText = matchPercentage >= 60 ? `Matched: ${bestMatch.name}` : `Checking: ${bestMatch.name}`;
+        matchPercentText.innerText = `${matchPercentage}%`;
+        matchProgressBar.style.width = `${Math.min(100, matchPercentage)}%`;
+        matchProgressBar.style.background = matchPercentage >= 60 ? "var(--success)" : "var(--warning)";
+
+        // Auto Mark Present at >= 60%
+        if (matchPercentage >= 60) {
+            cameraWrapper.classList.add('matched');
+            const alreadyLogged = attendanceLogs.some(log => log.name === bestMatch.name);
+
+            if (!alreadyLogged && !isRecognizing) {
+                isRecognizing = true;
+                const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                attendanceLogs.unshift({
+                    name: bestMatch.name,
+                    status: "Present",
+                    time: timeNow,
+                    details: `${matchPercentage}%`
+                });
+                localStorage.setItem('attendance_db', JSON.stringify(attendanceLogs));
+                showToast(`Present Marked: ${bestMatch.name} (${matchPercentage}%)`);
+                renderUI();
+
+                setTimeout(() => { isRecognizing = false; }, 3000);
+            }
+        } else {
+            cameraWrapper.classList.remove('matched');
+        }
+    }
+
+    // Manual Status (Medical Leave, On Duty, Absent)
+    function markDirectStatus(statusType) {
+        const studentName = document.getElementById('targetStudent').value;
+        if (!studentName) return showToast("Please select a student first!");
+
+        const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        attendanceLogs = attendanceLogs.filter(log => log.name !== studentName);
+
+        attendanceLogs.unshift({
+            name: studentName,
+            status: statusType,
+            time: timeNow,
+            details: "Manual"
+        });
+        localStorage.setItem('attendance_db', JSON.stringify(attendanceLogs));
+        showToast(`${studentName} marked as ${statusType}`);
+        renderUI();
+    }
+
+    // Clear Error / Reset Attendance Record
+    function clearAttendanceRecord(studentName) {
+        if (!confirm(`Reset today's record for ${studentName}?`)) return;
+        attendanceLogs = attendanceLogs.filter(log => log.name !== studentName);
+        localStorage.setItem('attendance_db', JSON.stringify(attendanceLogs));
+        showToast(`Record reset for ${studentName}`);
+        renderUI();
+    }
+
+    // Remove Student Completely
+    function removeStudent(index) {
+        if (!confirm("Delete this student permanently?")) return;
+        let removedName = registeredStudents[index].name;
+        registeredStudents.splice(index, 1);
+        localStorage.setItem('students_db', JSON.stringify(registeredStudents));
+
+        attendanceLogs = attendanceLogs.filter(log => log.name !== removedName);
+        localStorage.setItem('attendance_db', JSON.stringify(attendanceLogs));
+        showToast(`${removedName} removed`);
+        renderUI();
+    }
+
+    // Export CSV
+    function exportCSV() {
+        if (attendanceLogs.length === 0) return showToast("No attendance records to export!");
+        let csv = "Student Name,Status,Time,Match/Type\n";
+        attendanceLogs.forEach(r => {
+            csv += `"${r.name}","${r.status}","${r.time}","${r.details}"\n`;
+        });
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Attendance_${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+    }
+
+    // Render UI
+    function renderUI() {
+        document.getElementById('regCount').innerText = registeredStudents.length;
+        document.getElementById('totalCount').innerText = registeredStudents.length;
+
+        let uniqueLogs = [];
+        attendanceLogs.forEach(log => {
+            if (!uniqueLogs.some(item => item.name === log.name)) uniqueLogs.push(log);
+        });
+        attendanceLogs = uniqueLogs;
+        localStorage.setItem('attendance_db', JSON.stringify(attendanceLogs));
+
+        document.getElementById('logBadge').innerText = attendanceLogs.length;
+
+        let present = 0, leave = 0, absent = 0;
+        attendanceLogs.forEach(log => {
+            if (log.status === "Present") present++;
+            else if (log.status === "Medical Leave" || log.status === "On Duty") leave++;
+            else if (log.status === "Absent") absent++;
+        });
+
+        document.getElementById('presentCount').innerText = present;
+        document.getElementById('leaveCount').innerText = leave;
+        document.getElementById('absentCount').innerText = absent;
+
+        const dropdown = document.getElementById('targetStudent');
+        dropdown.innerHTML = '<option value="">-- Select Student --</option>' +
+            registeredStudents.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+
+        const listDiv = document.getElementById('studentList');
+        listDiv.innerHTML = registeredStudents.length === 0
+            ? '<p style="font-size:12px; color:#9ca3af;">No students registered yet.</p>'
+            : registeredStudents.map((s, i) => `
+                <div class="list-item">
+                    <span><b>${s.name}</b></span>
+                    <button class="mini-btn mini-del" onclick="removeStudent(${i})">Remove</button>
+                </div>
+            `).join('');
+
+        const tableBody = document.getElementById('attendanceTable');
+        tableBody.innerHTML = attendanceLogs.length === 0
+            ? '<tr><td colspan="4" style="text-align:center; color:#9ca3af;">No attendance marked today.</td></tr>'
+            : attendanceLogs.map(log => {
+                let badgeClass = log.status === "Present" ? "badge-present" : (log.status === "Absent" ? "badge-absent" : "badge-leave");
+                return `
+                    <tr>
+                        <td><b>${log.name}</b></td>
+                        <td><span class="badge ${badgeClass}">${log.status}</span></td>
+                        <td>${log.time}</td>
+                        <td><button class="mini-btn mini-reset" onclick="clearAttendanceRecord('${log.name}')">Reset</button></td>
+                    </tr>
+                `;
+            }).join('');
+    }
+</script>
+
+</body>
+</html>
